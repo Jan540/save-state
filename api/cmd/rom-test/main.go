@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type NDSROMHeader struct {
@@ -14,6 +15,8 @@ type NDSROMHeader struct {
 }
 
 func main() {
+	fmt.Printf("backup%s.sav\n", time.Now().Format("020106-150405"))
+
 	path := "/home/jann/games/roms"
 
 	saveDir, err := os.ReadDir(path)
@@ -50,6 +53,6 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Printf("Game Title: %s\n", header.GameTitle)
+		fmt.Printf("Game Title: %s; Game Code: %s\n", header.GameTitle, header.GameCode)
 	}
 }

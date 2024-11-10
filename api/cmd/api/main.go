@@ -22,7 +22,8 @@ func main() {
 	storage := filesystem.NewSaveStorage(os.Getenv("SAVE_DIRECTORY"))
 	saveController := controllers.NewSaveController(*storage)
 
-	e.GET("/", saveController.GetSavedFiles)
+	e.GET("/", saveController.GetSaves)
+	e.POST("/sync", saveController.PostSaves)
 
 	e.Logger.Fatal(e.Start(":6969"))
 }
