@@ -7,7 +7,6 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 type SaveStorage struct {
@@ -20,85 +19,55 @@ func NewSaveStorage(d string) *SaveStorage {
 	}
 }
 
-func (ss *SaveStorage) ListFiles() ([]models.SaveFile, error) {
-	filesRaw, err := os.ReadDir(ss.baseDir)
+func (ss *SaveStorage) ListSaves() ([]models.SaveMetadata, error) {
+	saves := make([]models.SaveMetadata, 0)
+
+	// get all current.sav files from subdirs of ss.baseDir
+
+	err := filepath.Walk(ss.baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if info.Name() == "current.sav" {
+			gameCode := filepath.Base(filepath.Dir(path))
+
+			save := models.SaveMetadata{
+				GameCode: gameCode,
+				SaveTime: info.ModTime(),
+			}
+
+			saves = append(saves, save)
+		}
+
+		return nil
+	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	files := make([]models.SaveFile, 0)
-
-	for _, file := range filesRaw {
-		if file.IsDir() {
-			continue
-		}
-
-		info, err := file.Info()
-
-		if err != nil {
-			return nil, err
-		}
-
-		file := models.SaveFile{
-			Name:    info.Name(),
-			Size:    info.Size(),
-			ModTime: info.ModTime(),
-		}
-
-		files = append(files, file)
-	}
-
-	return files, nil
+	return saves, nil
 }
 
-func (ss *SaveStorage) SaveSaves(userId string, saves []*multipart.FileHeader) error {
-	for _, save := range saves {
-		if err := ss.SaveSave(userId, save); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (ss *SaveStorage) SaveSave(userId string, save *multipart.FileHeader) error {
-	gameCode := save.Filename
-
-	src, err := save.Open()
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	gameDir := filepath.Join(ss.baseDir, userId, gameCode)
+func (ss *SaveStorage) SaveSave(data models.Save, file *multipart.FileHeader) error {
+	gameDir := filepath.Join(ss.baseDir, data.UserId, data.GameCode)
 
 	if err := os.MkdirAll(gameDir, os.ModePerm); err != nil {
 		return err
 	}
 
-	dstPath := filepath.Join(gameDir, "current.sav")
-
-	if _, err := os.Stat(dstPath); err == nil {
-		backupFileName := fmt.Sprintf("backup%s.sav", time.Now().Format("060102-150405"))
-
-		backupPath := filepath.Join(gameDir, backupFileName)
-
-		if err := os.Rename(dstPath, backupPath); err != nil {
-			return err
-		}
-
-		files, err := os.ReadDir(gameDir)
-		if err != nil {
-			return err
-		}
-
-		if len(files) > 5 {
-			if err := ss.deleteOldestSave(gameDir, files); err != nil {
-				return err
-			}
-		}
+	src, err := file.Open()
+	if err != nil {
+		return err
 	}
+	defer src.Close()
+
+	dstPath := filepath.Join(gameDir, "current.sav")
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
@@ -113,35 +82,21 @@ func (ss *SaveStorage) SaveSave(userId string, save *multipart.FileHeader) error
 	return nil
 }
 
-func (ss *SaveStorage) deleteOldestSave(gameDir string, files []os.DirEntry) error {
-	var oldest os.FileInfo
+func (ss *SaveStorage) DeleteSave(save models.Save) error {
+	path := filepath.Join(ss.baseDir, save.UserId, save.GameCode, save.Filename)
+	err := os.Remove(path)
+	return err
+}
 
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
+func (ss *SaveStorage) CreateBackup(save models.Save) (models.Save, error) {
+	gameDir := filepath.Join(ss.baseDir, save.UserId, save.GameCode)
+	backupFilename := fmt.Sprintf("backup_%d", save.SaveTime.Unix())
 
-		info, err := file.Info()
-		if err != nil {
-			return err
-		}
+	oldPath := filepath.Join(gameDir, save.Filename)
+	newPath := filepath.Join(gameDir, backupFilename)
+	save.Filename = backupFilename
+	save.IsBackup = true
 
-		if oldest == nil {
-			oldest = info
-			continue
-		}
-
-		fileInfo, _ := file.Info()
-
-		if fileInfo.ModTime().Before(oldest.ModTime()) {
-			oldest = info
-		}
-	}
-
-	err := os.Remove(filepath.Join(gameDir, oldest.Name()))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	err := os.Rename(oldPath, newPath)
+	return save, err
 }
