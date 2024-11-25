@@ -25,6 +25,7 @@ func InitDB(dbFile string) (*SaveDB, error) {
 			saveTime DATETIME NOT NULL,
 			isBackup BOOLEAN NOT NULL DEFAULT FALSE,
 			filename VARCHAR(255) NOT NULL DEFAULT 'current.sav',
+			createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(gameCode, userId, saveTime)
 		);`)
 

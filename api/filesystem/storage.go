@@ -19,39 +19,14 @@ func NewSaveStorage(d string) *SaveStorage {
 	}
 }
 
-func (ss *SaveStorage) ListSaves() ([]models.SaveMetadata, error) {
-	saves := make([]models.SaveMetadata, 0)
+func (ss *SaveStorage) GetSavePath(userId string, gameCode string) (string, error) {
+	path := filepath.Join(ss.baseDir, userId, gameCode, "current.sav")
 
-	// get all current.sav files from subdirs of ss.baseDir
-
-	err := filepath.Walk(ss.baseDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		if info.Name() == "current.sav" {
-			gameCode := filepath.Base(filepath.Dir(path))
-
-			save := models.SaveMetadata{
-				GameCode: gameCode,
-				SaveTime: info.ModTime(),
-			}
-
-			saves = append(saves, save)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return "", fmt.Errorf("Save not found")
 	}
 
-	return saves, nil
+	return path, nil
 }
 
 func (ss *SaveStorage) SaveSave(data models.Save, file *multipart.FileHeader) error {

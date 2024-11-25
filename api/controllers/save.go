@@ -34,6 +34,29 @@ func (sc *SaveController) GetSaveInfos(c echo.Context) error {
 	return c.JSON(http.StatusOK, saves)
 }
 
+type GetSaveReq struct {
+	GameCode string `param:"game_code"`
+}
+
+func (sc *SaveController) GetSave(c echo.Context) error {
+	userId := "1234-1234-1234-1234"
+
+	var req GetSaveReq
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Bad Request 😥")
+	}
+
+	path, err := sc.storage.GetSavePath(userId, req.GameCode)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "Save not found 🤷")
+	}
+
+	// TODO: metadata?
+	// TODO: manual stream?
+
+	return c.File(path)
+}
+
 type PostSaveReq struct {
 	GameCode string `param:"game_code"`
 }
@@ -44,11 +67,12 @@ type PostSaveRes struct {
 }
 
 func (sc *SaveController) PostSave(c echo.Context) error {
+	// TODO: force sync
 	userId := "1234-1234-1234-1234"
 
 	var req PostSaveReq
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "Bad Request 😥: "+err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest, "Bad Request 😥")
 	}
 
 	saveFile, err := c.FormFile("save")
@@ -68,9 +92,39 @@ func (sc *SaveController) PostSave(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to parse metadata 🏷️: "+err.Error())
 	}
 
+	newSave := &models.Save{
+		GameCode: req.GameCode,
+		UserId:   userId,
+		SaveTime: metadata.SaveTime,
+	}
+
 	saveCount, err := sc.db.GetSaveCount(userId, req.GameCode)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get save count 🤷: "+err.Error())
+	}
+
+	if saveCount > 0 {
+		currentSave, err := sc.db.GetCurrentSave(userId, req.GameCode)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get current save 🤷: "+err.Error())
+		}
+
+		if newSave.SaveTime.Equal(currentSave.SaveTime) {
+			return echo.NewHTTPError(http.StatusBadRequest, "Save already synced 😠")
+		}
+
+		if newSave.SaveTime.Before(currentSave.SaveTime) {
+			return echo.NewHTTPError(http.StatusBadRequest, "Save is older than the current save 😠.")
+		}
+
+		backup, err := sc.storage.CreateBackup(currentSave)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create backup 😢: "+err.Error())
+		}
+
+		if err = sc.db.UpdateSave(backup); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to update save in db 😢: "+err.Error())
+		}
 	}
 
 	if saveCount >= 10 {
@@ -84,32 +138,9 @@ func (sc *SaveController) PostSave(c echo.Context) error {
 		}
 
 		if err = sc.storage.DeleteSave(oldestSave); err != nil {
-			// TODO: revert db changes
+			// TODO: revert db changes?!?!??!
 			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete oldest save from storage 😢: "+err.Error())
 		}
-	}
-
-	if saveCount > 0 {
-		currentSave, err := sc.db.GetCurrentSave(userId, req.GameCode)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get current save 🤷: "+err.Error())
-		}
-
-		backup, err := sc.storage.CreateBackup(currentSave)
-
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create backup 😢: "+err.Error())
-		}
-
-		if err = sc.db.UpdateSave(backup); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to update save in db 😢: "+err.Error())
-		}
-	}
-
-	newSave := &models.Save{
-		GameCode: req.GameCode,
-		UserId:   userId,
-		SaveTime: metadata.SaveTime,
 	}
 
 	if err = sc.db.CreateSave(newSave); err != nil {
