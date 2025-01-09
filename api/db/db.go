@@ -26,14 +26,56 @@ func InitDB(dbFile string) (*SaveDB, error) {
 			isBackup BOOLEAN NOT NULL DEFAULT FALSE,
 			filename VARCHAR(255) NOT NULL DEFAULT 'current.sav',
 			createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(userId) REFERENCES users(userId),
 			UNIQUE(gameCode, userId, saveTime)
-		);`)
+		);
+
+		CREATE TABLE IF NOT EXISTS users(
+			userId VARCHAR(255) PRIMARY KEY,
+			createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+			username VARCHAR(255) NOT NULL UNIQUE,
+			password VARCHAR(255) NOT NULL
+		);
+		`)
 
 	return &SaveDB{conn: db}, err
 }
 
 func (sdb *SaveDB) Close() error {
 	return sdb.conn.Close()
+}
+
+func (sdb *SaveDB) CreateUser(user *models.User) error {
+	_, err := sdb.conn.Exec(`
+		INSERT INTO users (userId, username, password) VALUES ($1, $2, $3);`,
+		user.UserId,
+		user.Username,
+		user.Password)
+
+	return err
+}
+
+func (sdb *SaveDB) UserExists(username string) (bool, error) {
+	var count int
+
+	err := sdb.conn.Get(&count, `
+		SELECT count(*) FROM users
+		WHERE username=$1;`,
+		username)
+
+	return count > 0, err
+}
+
+func (sdb *SaveDB) GetUserPassword(username string) (models.User, error) {
+	var user models.User
+
+	err := sdb.conn.Get(&user, `
+		SELECT * FROM users
+		WHERE username=$1;`,
+		username,
+	)
+
+	return user, err
 }
 
 func (sdb *SaveDB) CreateSave(save *models.Save) error {

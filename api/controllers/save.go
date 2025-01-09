@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"jan540/save-state/auth"
 	"jan540/save-state/db"
 	"jan540/save-state/filesystem"
 	"jan540/save-state/models"
@@ -23,7 +24,11 @@ func NewSaveController(db *db.SaveDB, s *filesystem.SaveStorage) *SaveController
 }
 
 func (sc *SaveController) GetSaveInfos(c echo.Context) error {
-	userId := "1234-1234-1234-1234"
+	// TODO: middleware for userId
+	userId, err := auth.GetUserIdFromContext(c)
+	if err != nil {
+		return err
+	}
 
 	saves, err := sc.db.GetSaves(userId)
 
@@ -39,7 +44,10 @@ type GetSaveReq struct {
 }
 
 func (sc *SaveController) GetSave(c echo.Context) error {
-	userId := "1234-1234-1234-1234"
+	userId, err := auth.GetUserIdFromContext(c)
+	if err != nil {
+		return err
+	}
 
 	var req GetSaveReq
 	if err := c.Bind(&req); err != nil {
@@ -68,7 +76,10 @@ type PostSaveRes struct {
 
 func (sc *SaveController) PostSave(c echo.Context) error {
 	// TODO: force sync
-	userId := "1234-1234-1234-1234"
+	userId, err := auth.GetUserIdFromContext(c)
+	if err != nil {
+		return err
+	}
 
 	var req PostSaveReq
 	if err := c.Bind(&req); err != nil {
