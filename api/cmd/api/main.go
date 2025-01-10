@@ -30,11 +30,10 @@ func main() {
 	storage := filesystem.NewSaveStorage(os.Getenv("SAVE_DIRECTORY"))
 
 	authController := controllers.NewAuthController(db, authSecret)
+	saveController := controllers.NewSaveController(db, storage)
 
 	e.POST("/login", authController.Login)
 	e.POST("/register", authController.Register)
-
-	saveController := controllers.NewSaveController(db, storage)
 
 	p := e.Group("")
 

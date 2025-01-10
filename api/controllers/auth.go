@@ -3,6 +3,7 @@ package controllers
 import (
 	"jan540/save-state/db"
 	"jan540/save-state/models"
+	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -36,16 +37,16 @@ func (ac *AuthController) Login(c echo.Context) error {
 	var req LoginReq
 
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "Bad Request")
+		return echo.NewHTTPError(http.StatusBadRequest, "Bad Request")
 	}
 
 	user, err := ac.db.GetUserPassword(req.Username)
 	if err != nil {
-		return echo.NewHTTPError(401, "User not found :(")
+		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid username :(")
 	}
 
 	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return echo.NewHTTPError(401, "Invalid password :(")
+		return echo.NewHTTPError(http.StatusUnauthorized, "Invalid password :(")
 	}
 
 	claims := &jwt.RegisteredClaims{
@@ -59,10 +60,10 @@ func (ac *AuthController) Login(c echo.Context) error {
 
 	signedToken, err := token.SignedString([]byte(ac.jwtSecret))
 	if err != nil {
-		return echo.NewHTTPError(500, "Failed to create session"+err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create session"+err.Error())
 	}
 
-	return c.JSON(200, LoginRes{Token: signedToken})
+	return c.JSON(http.StatusOK, LoginRes{Token: signedToken})
 }
 
 type RegisterReq struct {
@@ -74,21 +75,21 @@ func (ac *AuthController) Register(c echo.Context) error {
 	var req RegisterReq
 
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(400, "Bad Request")
+		return echo.NewHTTPError(http.StatusBadRequest, "Bad Request")
 	}
 
 	exists, err := ac.db.UserExists(req.Username)
 	if err != nil {
-		return echo.NewHTTPError(500, "Failed to check if user exists")
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to check if user exists")
 	}
 
 	if exists {
-		return echo.NewHTTPError(400, "User already exists")
+		return echo.NewHTTPError(http.StatusBadRequest, "User already exists")
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return echo.NewHTTPError(500, "Failed to hash password")
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to hash password")
 	}
 
 	user := &models.User{
@@ -99,8 +100,8 @@ func (ac *AuthController) Register(c echo.Context) error {
 
 	err = ac.db.CreateUser(user)
 	if err != nil {
-		return echo.NewHTTPError(500, "Failed to create user")
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create user")
 	}
 
-	return c.JSON(200, "User created")
+	return c.JSON(http.StatusOK, "User created")
 }
